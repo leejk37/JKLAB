@@ -1,1 +1,680 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>크롬북 전환 점검</title>
+<style>
+:root{
+  --bg:#f4f5f7;--card:#fff;--ink:#1d2330;--muted:#6b7385;--line:#e2e5eb;
+  --accent:#2563eb;--ok:#16a34a;--bad:#dc2626;--skip:#9ca3af;--okbg:#dcfce7;--badbg:#fee2e2;--warnbg:#fef3c7;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans KR","Apple SD Gothic Neo",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+nav{background:#111827;color:#d1d5db;padding:16px 0;position:sticky;top:0;height:100vh;overflow:auto}
+nav h1{font-size:16px;color:#fff;padding:0 16px 12px;margin:0;border-bottom:1px solid #374151}
+nav .dev{font-size:12px;color:#9ca3af;padding:8px 16px 0}
+nav ol{list-style:none;margin:0;padding:8px 0}
+nav li{padding:9px 16px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;font-size:14px}
+nav li:hover{background:#1f2937}
+nav li.active{background:#2563eb;color:#fff;font-weight:700}
+main{padding:24px;max-width:1050px;width:100%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:16px}
+.stepno{color:var(--accent);font-weight:700;font-size:13px}
+h2{margin:2px 0 6px;font-size:22px}
+h3{margin:18px 0 8px;font-size:16px}
+.desc{color:var(--muted);margin:0 0 16px;font-size:14px;line-height:1.6}
+button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 14px;border-radius:8px;cursor:pointer}
+button:hover{border-color:#9ca3af}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.verdict{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.vlabel{font-weight:700;margin-right:4px}
+.verdict .note{flex:1;min-width:220px}
+button.pass.on{background:var(--ok);color:#fff;border-color:var(--ok)}
+button.fail.on{background:var(--bad);color:#fff;border-color:var(--bad)}
+button.skip.on{background:var(--skip);color:#fff;border-color:var(--skip)}
+input[type=text],input:not([type]){font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.navbtns{display:flex;justify-content:space-between}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+th{background:#f9fafb;width:180px;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:6px 10px;border-radius:999px;background:#f3f4f6;border:1px solid var(--line);font-size:13px}
+.chip.done{background:var(--okbg);border-color:#86efac;color:#166534;font-weight:600}
+.alert{padding:10px 12px;border-radius:8px;background:var(--warnbg);font-size:14px;margin:8px 0}
+.alert.ok{background:var(--okbg)} .alert.bad{background:var(--badbg)}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+/* keyboard */
+.kb{background:#e5e7eb;padding:10px;border-radius:10px;user-select:none}
+.kbrow{display:flex;gap:5px;margin-bottom:5px}
+.key{flex:1;min-width:0;height:42px;background:#fff;border:1px solid #cbd5e1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;white-space:nowrap;overflow:hidden;transition:background .1s}
+.key.hit{background:#86efac;border-color:#16a34a}
+.key.down{background:#16a34a;color:#fff}
+.lastkey{margin:10px 0;font-size:14px}
+/* touchpad */
+.pad{position:relative;height:300px;border:2px dashed #94a3b8;border-radius:12px;background:#f8fafc;display:flex;align-items:center;justify-content:center;color:var(--muted);overflow:hidden;touch-action:none}
+.dot{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--accent);transform:translate(-50%,-50%);pointer-events:none}
+/* meter */
+.meter{height:22px;background:#e5e7eb;border-radius:999px;overflow:hidden}
+.meter>div{height:100%;width:0;background:linear-gradient(90deg,#22c55e,#eab308,#ef4444);transition:width .05s}
+video{width:100%;max-width:560px;border-radius:10px;background:#000}
+.overlay{position:fixed;inset:0;z-index:9999;cursor:none}
+.overlay .hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);color:#fff;padding:14px 18px;border-radius:10px;font-size:16px;cursor:default;transition:opacity .6s}
+.mrow{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.mrow small{color:var(--muted);display:block}
+.mrow button{padding:6px 10px}
+.big{font-size:28px;font-weight:800}
+@media (max-width:760px){.app{grid-template-columns:1fr} nav{position:static;height:auto}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav>
+    <h1>💻 크롬북 전환 점검</h1>
+    <div class="dev" id="navDev"></div>
+    <ol id="steps"></ol>
+  </nav>
+  <main id="main"></main>
+</div>
 
+<script>
+/* ===================== 설정 ===================== */
+const CONFIG = {
+  GAS_URL: '',                 // GAS 웹앱 배포 URL(…/exec)을 붙여넣으세요
+  TOKEN: 'flex-check-2026'     // Code.gs 의 TOKEN 과 같아야 합니다
+};
+
+/* ===================== 상태 저장 ===================== */
+const $ = (s, r = document) => r.querySelector(s);
+const STORE = 'flexcheck-v1';
+const fresh = (tester = '') => ({ info: { assetId: '', model: '', tester }, sys: {}, results: {}, manual: {}, sleepLog: [], startedAt: new Date().toISOString() });
+let state = (() => { try { return JSON.parse(localStorage.getItem(STORE)) || fresh(); } catch (e) { return fresh(); } })();
+function save() { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} }
+function res(id) { if (!state.results[id]) state.results[id] = { status: '', note: '', auto: {} }; return state.results[id]; }
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ===================== 단계 정의 ===================== */
+const STEPS = [
+  { id: 'info', title: '기기 정보', judged: false, verdict: false, render: renderInfo },
+  { id: 'keyboard', title: '키보드', render: renderKeyboard },
+  { id: 'touchpad', title: '터치패드', render: renderTouchpad },
+  { id: 'display', title: '화면', render: renderDisplay },
+  { id: 'speaker', title: '스피커', render: renderSpeaker },
+  { id: 'mic', title: '마이크', render: renderMic },
+  { id: 'camera', title: '카메라', render: renderCamera },
+  { id: 'network', title: '네트워크', render: renderNetwork },
+  { id: 'battery', title: '배터리·충전', render: renderBattery },
+  { id: 'ports', title: 'USB·외부장치', render: renderPorts },
+  { id: 'manual', title: '기타 기능(수동)', verdict: false, render: renderManual },
+  { id: 'summary', title: '결과 요약·전송', judged: false, verdict: false, render: renderSummary },
+];
+const JUDGED = STEPS.filter(s => s.judged !== false);
+const ICON = { pass: '✅', fail: '❌', skip: '➖', '': '·' };
+const LABEL = { pass: '정상', fail: '이상', skip: '해당없음', '': '미점검' };
+
+let cur = 0, cleanup = null;
+function go(i) {
+  if (cleanup) { try { cleanup(); } catch (e) {} cleanup = null; }
+  cur = i; const s = STEPS[i];
+  const main = $('#main'); main.innerHTML = '';
+  const card = document.createElement('section'); card.className = 'card';
+  card.innerHTML = `<div class="stepno">${i} / ${STEPS.length - 1}</div><h2>${s.title}</h2>`;
+  const body = document.createElement('div'); card.appendChild(body);
+  main.appendChild(card);
+  cleanup = s.render(body) || null;
+  if (s.verdict !== false) card.appendChild(verdictBox(s.id));
+  const nb = document.createElement('div'); nb.className = 'navbtns';
+  nb.innerHTML = `<button id="prevBtn" ${i === 0 ? 'disabled' : ''}>← 이전</button><button id="nextBtn" class="primary" ${i === STEPS.length - 1 ? 'disabled' : ''}>다음 →</button>`;
+  main.appendChild(nb);
+  $('#prevBtn').onclick = () => go(i - 1);
+  $('#nextBtn').onclick = () => go(i + 1);
+  renderNav(); window.scrollTo(0, 0);
+}
+function renderNav() {
+  $('#navDev').textContent = state.info.assetId ? `관리번호: ${state.info.assetId}` : '관리번호 미입력';
+  $('#steps').innerHTML = STEPS.map((s, i) =>
+    `<li data-i="${i}" class="${i === cur ? 'active' : ''}"><span>${i}. ${s.title}</span><span>${s.judged === false ? '' : ICON[(state.results[s.id] || {}).status || '']}</span></li>`).join('');
+  $('#steps').querySelectorAll('li').forEach(li => li.onclick = () => go(+li.dataset.i));
+}
+function verdictBox(id) {
+  const r = res(id);
+  const box = document.createElement('div'); box.className = 'verdict';
+  box.innerHTML = `<span class="vlabel">판정</span>
+    <button data-v="pass" class="pass">✅ 정상</button>
+    <button data-v="fail" class="fail">❌ 이상</button>
+    <button data-v="skip" class="skip">➖ 해당없음</button>
+    <input class="note" placeholder="메모 (예: F5 키 안 눌림, 오른쪽 스피커 잡음)">`;
+  const note = $('.note', box); note.value = r.note || '';
+  const paint = () => box.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === r.status));
+  box.querySelectorAll('button').forEach(b => b.onclick = () => { r.status = b.dataset.v; save(); paint(); renderNav(); });
+  note.oninput = () => { r.note = note.value; save(); };
+  paint(); return box;
+}
+/* 체크칩 도우미: 자동/수동 체크 항목 */
+function chipSet(el, r, items, clickable = false) {
+  r.auto.checks = r.auto.checks || {};
+  const draw = () => {
+    el.innerHTML = items.map(([k, t]) => `<span class="chip ${r.auto.checks[k] ? 'done' : ''}" data-k="${k}" style="${clickable ? 'cursor:pointer' : ''}">${r.auto.checks[k] ? '✔ ' : ''}${t}</span>`).join('');
+    if (clickable) el.querySelectorAll('.chip').forEach(c => c.onclick = () => { r.auto.checks[c.dataset.k] = !r.auto.checks[c.dataset.k]; save(); draw(); });
+  };
+  draw();
+  return k => { if (!r.auto.checks[k]) { r.auto.checks[k] = true; save(); draw(); } };
+}
+function errMsg(e) {
+  const m = { NotAllowedError: '권한이 거부되었습니다. 주소창 왼쪽 자물쇠 아이콘에서 권한을 허용하세요.', NotFoundError: '장치를 찾을 수 없습니다. 장치가 없거나 드라이버가 지원되지 않는 상태입니다.', NotReadableError: '장치를 열 수 없습니다. 다른 앱이 사용 중이거나 하드웨어 문제일 수 있습니다.' };
+  return `${m[e.name] || '오류가 발생했습니다.'} (${e.name}: ${e.message})`;
+}
+
+/* ===================== 0. 기기 정보 ===================== */
+function getGPU() {
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (!gl) return 'WebGL 사용 불가';
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  } catch (e) { return '확인 불가'; }
+}
+async function collectSys() {
+  const ua = navigator.userAgent;
+  const sys = {
+    chromeOS: /CrOS/.test(ua),
+    crosVersion: (ua.match(/CrOS \S+ ([\d.]+)/) || [])[1] || '',
+    chrome: (ua.match(/Chrome\/([\d.]+)/) || [])[1] || '',
+    cores: navigator.hardwareConcurrency || '',
+    memoryGB: navigator.deviceMemory || '',
+    screen: `${screen.width}×${screen.height} (배율 ${devicePixelRatio})`,
+    gpu: getGPU(),
+    ua
+  };
+  try { if (navigator.storage?.estimate) { const e = await navigator.storage.estimate(); sys.storageGB = (e.quota / 1e9).toFixed(1); } } catch (e) {}
+  return sys;
+}
+function renderInfo(body) {
+  body.innerHTML = `
+    <p class="desc">점검할 기기 정보를 입력하세요. 시스템 정보는 자동으로 수집됩니다.<br>
+    CPU·메모리·배터리 수명 같은 내부 하드웨어는 ChromeOS 기본 <b>'진단(Diagnostics)'</b> 앱으로 함께 확인하면 더 정확합니다.</p>
+    <div class="row" style="margin-bottom:14px">
+      <input id="assetId" placeholder="관리번호 (예: NB-07)" style="width:180px">
+      <input id="model" placeholder="제조사·모델명 (예: LG 15N540)" style="width:260px">
+      <input id="tester" placeholder="점검자" style="width:140px">
+    </div>
+    <div id="osAlert"></div>
+    <h3>자동 수집 정보</h3><table id="sysTable"><tr><td>수집 중…</td></tr></table>`;
+  ['assetId', 'model', 'tester'].forEach(k => {
+    const el = $('#' + k, body); el.value = state.info[k] || '';
+    el.oninput = () => { state.info[k] = el.value.trim(); save(); renderNav(); };
+  });
+  collectSys().then(sys => {
+    state.sys = sys; save();
+    $('#osAlert', body).innerHTML = sys.chromeOS
+      ? `<div class="alert ok">✅ ChromeOS 환경에서 실행 중입니다 (플랫폼 ${esc(sys.crosVersion)}).</div>`
+      : `<div class="alert">⚠️ 현재 ChromeOS가 아닌 환경입니다. ChromeOS Flex 설치 후 다시 점검해야 정확합니다.</div>`;
+    $('#sysTable', body).innerHTML = [
+      ['ChromeOS 플랫폼 버전', sys.crosVersion || '-'], ['Chrome 버전', sys.chrome],
+      ['CPU 논리 코어 수', sys.cores], ['메모리(대략)', sys.memoryGB ? sys.memoryGB + 'GB (8GB 이상은 8로 표시됨)' : '확인 불가'],
+      ['그래픽', sys.gpu], ['화면', sys.screen], ['브라우저 저장 공간(대략)', sys.storageGB ? sys.storageGB + 'GB' : '확인 불가'],
+    ].map(([k, v]) => `<tr><th>${k}</th><td>${esc(v)}</td></tr>`).join('');
+  });
+}
+
+/* ===================== 1. 키보드 ===================== */
+function kbLayout() {
+  const L = s => s.split('').map(c => ['Key' + c, c]);
+  const F = Array.from({ length: 12 }, (_, i) => ['F' + (i + 1), 'F' + (i + 1)]);
+  const D = '1234567890'.split('').map(d => ['Digit' + d, d]);
+  return [
+    [['Escape', 'Esc', 1.2], ...F, ['Delete', 'Del', 1.2]],
+    [['Backquote', '`'], ...D, ['Minus', '-'], ['Equal', '='], ['Backspace', '⌫', 2]],
+    [['Tab', 'Tab', 1.5], ...L('QWERTYUIOP'), ['BracketLeft', '['], ['BracketRight', ']'], ['Backslash', '\\', 1.5]],
+    [['CapsLock', 'Caps', 1.8], ...L('ASDFGHJKL'), ['Semicolon', ';'], ['Quote', "'"], ['Enter', 'Enter', 2.2]],
+    [['ShiftLeft', 'Shift', 2.3], ...L('ZXCVBNM'), ['Comma', ','], ['Period', '.'], ['Slash', '/'], ['ShiftRight', 'Shift', 2.7]],
+    [['ControlLeft', 'Ctrl', 1.3], ['MetaLeft', '검색/Win', 1.3], ['AltLeft', 'Alt', 1.3], ['Space', 'Space', 4], ['AltRight', '한/영(R-Alt)', 1.7], ['ControlRight', '한자(R-Ctrl)', 1.7], ['ArrowLeft', '←'], ['ArrowUp', '↑'], ['ArrowDown', '↓'], ['ArrowRight', '→']],
+  ];
+}
+function renderKeyboard(body) {
+  const r = res('keyboard');
+  const rows = kbLayout();
+  const known = new Map(); rows.flat().forEach(([c, l]) => known.set(c, l));
+  const pressed = new Set(r.auto.pressed || []), extra = new Set(r.auto.extra || []);
+  body.innerHTML = `
+    <p class="desc">모든 키를 하나씩 눌러 보세요. 인식된 키는 초록색으로 바뀝니다.<br>
+    ChromeOS Flex에서는 F1~F12가 '뒤로/새로고침/밝기' 등으로 동작할 수 있습니다. 이 경우 아래 '추가 감지 키'에 표시되며 정상입니다.
+    (검색 키를 누른 채 누르면 F키로 인식됩니다.)</p>
+    <div class="kb" id="kb">${rows.map(row => `<div class="kbrow">${row.map(([c, l, w = 1]) => `<div class="key ${pressed.has(c) ? 'hit' : ''}" data-c="${c}" style="flex:${w}">${esc(l)}</div>`).join('')}</div>`).join('')}</div>
+    <div class="lastkey">마지막 입력: <span class="mono" id="last">-</span></div>
+    <div class="row"><b id="prog"></b><button id="kbReset">초기화</button></div>
+    <h3>추가 감지 키 (한/영, 볼륨, 밝기, 상단 행 키 등)</h3><div class="chips" id="extra"></div>
+    <h3>아직 안 눌린 키</h3><div class="mono" id="missing" style="color:var(--bad)"></div>`;
+  const update = () => {
+    const missing = [...known.keys()].filter(c => !pressed.has(c));
+    $('#prog', body).textContent = `인식: ${pressed.size} / ${known.size}키`;
+    $('#extra', body).innerHTML = extra.size ? [...extra].map(c => `<span class="chip done">${esc(c)}</span>`).join('') : '<span class="chip">없음</span>';
+    $('#missing', body).textContent = missing.length ? missing.map(c => known.get(c)).join('  ') : '모두 인식됨 🎉';
+    r.auto.pressed = [...pressed]; r.auto.extra = [...extra];
+    r.auto.brief = `${pressed.size}/${known.size}키 인식` + (missing.length ? ` (미인식: ${missing.slice(0, 12).map(c => known.get(c)).join(' ')}${missing.length > 12 ? ' 외' : ''})` : '');
+    save();
+  };
+  const keyEl = c => body.querySelector(`.key[data-c="${c}"]`);
+  const onDown = e => {
+    if (e.target.matches('input,textarea')) return;
+    e.preventDefault();
+    const c = e.code || ('key:' + e.key);
+    $('#last', body).textContent = `code=${e.code || '(없음)'}  key=${e.key}`;
+    if (known.has(c)) { pressed.add(c); const k = keyEl(c); k.classList.add('hit', 'down'); }
+    else extra.add(c);
+    update();
+  };
+  const onUp = e => {
+    if (e.target.matches('input,textarea')) return;
+    const c = e.code || ('key:' + e.key);
+    if (known.has(c)) { const k = keyEl(c); k.classList.remove('down'); if (!pressed.has(c)) { pressed.add(c); k.classList.add('hit'); update(); } }
+    else if (!extra.has(c)) { extra.add(c); update(); }   // keyup 만 보내는 키 대비
+  };
+  document.addEventListener('keydown', onDown, true);
+  document.addEventListener('keyup', onUp, true);
+  $('#kbReset', body).onclick = () => { pressed.clear(); extra.clear(); body.querySelectorAll('.key').forEach(k => k.classList.remove('hit', 'down')); update(); };
+  update();
+  return () => { document.removeEventListener('keydown', onDown, true); document.removeEventListener('keyup', onUp, true); };
+}
+
+/* ===================== 2. 터치패드 ===================== */
+function renderTouchpad(body) {
+  const r = res('touchpad');
+  const items = [['click', '왼쪽 클릭(탭)'], ['right', '오른쪽 클릭(두 손가락 탭)'], ['dbl', '더블 클릭'], ['vscroll', '두 손가락 세로 스크롤'], ['hscroll', '두 손가락 가로 스크롤'], ['drag', '누른 채 끌기'], ['pinch', '확대/축소(선택)']];
+  body.innerHTML = `
+    <p class="desc">아래 상자 안에서 터치패드로 각 동작을 해 보세요. 성공한 동작은 초록색이 됩니다.<br>
+    물리 버튼이 있는 터치패드라면 버튼 클릭도 함께 확인하세요.</p>
+    <div class="chips" id="tpChips" style="margin-bottom:12px"></div>
+    <div class="pad" id="pad">이 영역에서 테스트하세요<div class="dot" id="dot" style="display:none"></div></div>
+    <div class="row" style="margin-top:8px"><span id="tpInfo" class="mono"></span><button id="tpReset">초기화</button></div>`;
+  const mark = chipSet($('#tpChips', body), r, items);
+  const updBrief = () => { const n = items.filter(([k]) => r.auto.checks[k]).length; r.auto.brief = `${n}/${items.length}개 동작 확인`; save(); };
+  const pad = $('#pad', body), dot = $('#dot', body);
+  let start = null;
+  const m = k => { mark(k); updBrief(); };
+  pad.addEventListener('pointerdown', e => { if (e.button === 0) { m('click'); start = { x: e.clientX, y: e.clientY }; } });
+  pad.addEventListener('pointermove', e => {
+    const b = pad.getBoundingClientRect(); dot.style.display = 'block';
+    dot.style.left = (e.clientX - b.left) + 'px'; dot.style.top = (e.clientY - b.top) + 'px';
+    $('#tpInfo', body).textContent = `포인터 종류: ${e.pointerType}`;
+    if (start && (e.buttons & 1) && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 100) m('drag');
+  });
+  pad.addEventListener('pointerup', () => start = null);
+  pad.addEventListener('contextmenu', e => { e.preventDefault(); m('right'); });
+  pad.addEventListener('dblclick', () => m('dbl'));
+  pad.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (e.ctrlKey) return m('pinch');
+    if (Math.abs(e.deltaY) > 0) m('vscroll');
+    if (Math.abs(e.deltaX) > 0) m('hscroll');
+  }, { passive: false });
+  $('#tpReset', body).onclick = () => { r.auto.checks = {}; save(); go(cur); };
+  updBrief();
+}
+
+/* ===================== 3. 화면 ===================== */
+function measureHz() {
+  return new Promise(ok => { let n = 0, t0 = null; const f = t => { if (t0 === null) t0 = t; n++; if (t - t0 < 1000) requestAnimationFrame(f); else ok(Math.round((n - 1) * 1000 / (t - t0))); }; requestAnimationFrame(f); });
+}
+function renderDisplay(body) {
+  const r = res('display');
+  body.innerHTML = `
+    <p class="desc">'불량화소 검사'를 누르면 전체 화면이 여러 색으로 바뀝니다. 각 색에서 <b>점처럼 튀는 화소, 줄, 얼룩, 빛샘(검정 화면 가장자리)</b>이 있는지 보세요.<br>
+    클릭 또는 스페이스로 다음 색, Esc로 종료합니다. 마지막 회색 그라데이션에서는 색 띠가 부드럽게 이어지는지 확인합니다.</p>
+    <table id="dispTable"><tr><td>측정 중…</td></tr></table>
+    <div class="row" style="margin-top:14px"><button class="primary" id="pixBtn">🖥️ 불량화소 검사 시작</button></div>
+    <h3>확인 항목 (눌러서 체크)</h3><div class="chips" id="dChips"></div>`;
+  chipSet($('#dChips', body), r, [['pixel', '불량화소 없음'], ['line', '줄·얼룩 없음'], ['bleed', '빛샘 심하지 않음'], ['gradient', '그라데이션 정상']], true);
+  measureHz().then(hz => {
+    const w = Math.round(screen.width * devicePixelRatio), h = Math.round(screen.height * devicePixelRatio);
+    r.auto.res = `${w}×${h}`; r.auto.hz = hz; r.auto.brief = `${w}×${h}, 약 ${hz}Hz`; save();
+    $('#dispTable', body).innerHTML = [['실제 해상도(추정)', `${w} × ${h}`], ['논리 해상도·배율', `${screen.width} × ${screen.height}, ${devicePixelRatio}배`], ['주사율(추정)', `약 ${hz}Hz`], ['색 깊이', `${screen.colorDepth}bit`]]
+      .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+  });
+  $('#pixBtn', body).onclick = pixelTest;
+}
+function pixelTest() {
+  const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffffff', '#000000', '#808080', 'linear-gradient(90deg,#000,#fff)'];
+  let i = 0;
+  const ov = document.createElement('div'); ov.className = 'overlay';
+  ov.innerHTML = '<div class="hint">클릭/스페이스: 다음 색 · Esc: 종료</div>';
+  document.body.appendChild(ov);
+  const paint = () => ov.style.background = colors[i];
+  const close = () => { document.removeEventListener('keydown', key, true); document.removeEventListener('fullscreenchange', fsc); ov.remove(); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); };
+  const next = () => { i++; if (i >= colors.length) close(); else paint(); };
+  const key = e => { e.preventDefault(); e.stopPropagation(); if (e.key === 'Escape') close(); else if ([' ', 'Enter', 'ArrowRight'].includes(e.key)) next(); };
+  const fsc = () => { if (!document.fullscreenElement) close(); };
+  ov.onclick = next;
+  document.addEventListener('keydown', key, true);
+  paint();
+  ov.requestFullscreen?.().then(() => document.addEventListener('fullscreenchange', fsc)).catch(() => {});
+  setTimeout(() => { const h = ov.querySelector('.hint'); if (h) h.style.opacity = 0; }, 2000);
+}
+
+/* ===================== 4. 스피커 ===================== */
+let audioCtx = null;
+function actx() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); return audioCtx; }
+function tone(pan, f1 = 440, dur = 1, f2 = null) {
+  const c = actx(), o = c.createOscillator(), g = c.createGain(), p = c.createStereoPanner(), t = c.currentTime;
+  o.frequency.setValueAtTime(f1, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  p.pan.value = pan;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.05);
+  g.gain.setValueAtTime(0.3, t + dur - 0.1); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(p).connect(c.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+function renderSpeaker(body) {
+  const r = res('speaker');
+  body.innerHTML = `
+    <p class="desc">볼륨을 적당히 올린 뒤 각 버튼을 눌러 소리가 <b>해당 방향에서만</b> 들리는지 확인하세요.
+    '저음→고음'은 4초 동안 음이 올라가며, 중간에 찢어지거나 끊기는 소리가 없어야 합니다.</p>
+    <div class="row">
+      <button id="sL">◀ 왼쪽</button><button id="sR">오른쪽 ▶</button><button id="sB">양쪽</button><button id="sS">🎵 저음→고음</button>
+    </div>
+    <h3>확인 항목 (눌러서 체크)</h3><div class="chips" id="sChips"></div>`;
+  chipSet($('#sChips', body), r, [['left', '왼쪽 들림'], ['right', '오른쪽 들림'], ['clean', '잡음·찢어짐 없음']], true);
+  $('#sL', body).onclick = () => tone(-1); $('#sR', body).onclick = () => tone(1); $('#sB', body).onclick = () => tone(0);
+  $('#sS', body).onclick = () => tone(0, 80, 4, 8000);
+  r.auto.brief = r.auto.brief || '청각 확인';
+}
+
+/* ===================== 5. 마이크 ===================== */
+function renderMic(body) {
+  const r = res('mic');
+  body.innerHTML = `
+    <p class="desc">'마이크 시작' 후 말하거나 박수를 쳐 보세요. 막대가 움직이면 정상입니다. '3초 녹음' 후 재생해서 소리가 깨끗한지도 확인하세요.</p>
+    <div class="row"><button class="primary" id="mStart">🎙️ 마이크 시작</button><button id="mRec" disabled>⏺ 3초 녹음</button></div>
+    <div id="mMsg"></div>
+    <div class="meter" style="margin:14px 0 6px"><div id="mBar"></div></div>
+    <div class="mono" id="mPeak">최대 입력: -</div>
+    <audio id="mAudio" controls style="margin-top:12px;display:none"></audio>`;
+  let stream = null, raf = 0, peak = r.auto.peak || 0;
+  $('#mStart', body).onclick = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const c = actx(), an = c.createAnalyser(); an.fftSize = 1024;
+      const src = c.createMediaStreamSource(stream); src.connect(an);
+      const buf = new Float32Array(an.fftSize);
+      const label = stream.getAudioTracks()[0]?.label || '';
+      $('#mMsg', body).innerHTML = `<div class="alert ok">✅ 마이크 연결됨: ${esc(label)}</div>`;
+      $('#mRec', body).disabled = false;
+      const loop = () => {
+        an.getFloatTimeDomainData(buf);
+        let s = 0; for (const v of buf) s += v * v;
+        const lv = Math.min(100, Math.round(Math.sqrt(s / buf.length) * 400));
+        $('#mBar', body).style.width = lv + '%';
+        if (lv > peak) { peak = lv; r.auto.peak = peak; r.auto.brief = `최대 입력 ${peak}% (${label})`; save(); $('#mPeak', body).textContent = `최대 입력: ${peak}%`; }
+        raf = requestAnimationFrame(loop);
+      };
+      loop();
+    } catch (e) { $('#mMsg', body).innerHTML = `<div class="alert bad">❌ ${esc(errMsg(e))}</div>`; r.auto.brief = '마이크 오류: ' + e.name; save(); }
+  };
+  $('#mRec', body).onclick = () => {
+    if (!stream) return;
+    const btn = $('#mRec', body); btn.disabled = true; btn.textContent = '녹음 중…';
+    const rec = new MediaRecorder(stream), chunks = [];
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = () => { const a = $('#mAudio', body); a.src = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType })); a.style.display = 'block'; a.play().catch(() => {}); btn.disabled = false; btn.textContent = '⏺ 3초 녹음'; };
+    rec.start(); setTimeout(() => rec.stop(), 3000);
+  };
+  return () => { cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()); };
+}
+
+/* ===================== 6. 카메라 ===================== */
+function renderCamera(body) {
+  const r = res('camera');
+  body.innerHTML = `
+    <p class="desc">'카메라 시작'을 눌러 영상이 나오는지, 초점·밝기·색이 자연스러운지 확인하세요. 카메라 옆 표시등이 켜지는지도 보세요.</p>
+    <div class="row"><button class="primary" id="cStart">📷 카메라 시작</button></div>
+    <div id="cMsg"></div>
+    <video id="cVid" autoplay playsinline muted style="margin-top:12px;display:none"></video>`;
+  let stream = null;
+  $('#cStart', body).onclick = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+      const v = $('#cVid', body); v.srcObject = stream; v.style.display = 'block';
+      const tr = stream.getVideoTracks()[0], st = tr.getSettings();
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput').length;
+      r.auto.brief = `${st.width}×${st.height}, ${Math.round(st.frameRate || 0)}fps, 카메라 ${cams}개`; save();
+      $('#cMsg', body).innerHTML = `<div class="alert ok">✅ ${esc(tr.label)} · ${esc(r.auto.brief)}</div>`;
+    } catch (e) { $('#cMsg', body).innerHTML = `<div class="alert bad">❌ ${esc(errMsg(e))}</div>`; r.auto.brief = '카메라 오류: ' + e.name; save(); }
+  };
+  return () => stream?.getTracks().forEach(t => t.stop());
+}
+
+/* ===================== 7. 네트워크 ===================== */
+function renderNetwork(body) {
+  const r = res('network');
+  body.innerHTML = `
+    <p class="desc">'속도 측정'으로 응답 시간과 다운로드 속도를 확인합니다. 그다음 <b>Wi-Fi를 껐다가 다시 켜서</b> 끊김·재연결이 감지되는지 확인하세요.</p>
+    <table id="nTable"></table>
+    <div class="row" style="margin-top:12px"><button class="primary" id="nTest">📶 속도 측정</button><span id="nMsg"></span></div>
+    <h3>Wi-Fi 끊김·재연결 감지</h3><div class="chips" id="nChips"></div>`;
+  const mark = chipSet($('#nChips', body), r, [['off', 'Wi-Fi 끊김 감지'], ['on', '다시 연결 감지']]);
+  const draw = () => {
+    const c = navigator.connection || {};
+    $('#nTable', body).innerHTML = [
+      ['연결 상태', navigator.onLine ? '🟢 온라인' : '🔴 오프라인'],
+      ['브라우저 추정 속도', c.downlink ? `${c.downlink}Mbps 이상 (${c.effectiveType})` : '-'],
+      ['응답 시간(평균)', r.auto.ping ? r.auto.ping + 'ms' : '-'],
+      ['다운로드 속도', r.auto.speed ? r.auto.speed + 'Mbps' : '-'],
+    ].map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
+  };
+  const brief = () => { r.auto.brief = `응답 ${r.auto.ping ?? '-'}ms, 다운로드 ${r.auto.speed ?? '-'}Mbps` + (r.auto.checks.off && r.auto.checks.on ? ', 재연결 확인' : ''); save(); };
+  const off = () => { mark('off'); brief(); draw(); }, on = () => { mark('on'); brief(); draw(); };
+  addEventListener('offline', off); addEventListener('online', on);
+  $('#nTest', body).onclick = async () => {
+    const msg = $('#nMsg', body); msg.textContent = '측정 중…';
+    try {
+      const times = [];
+      for (let i = 0; i < 5; i++) { const t = performance.now(); await fetch('https://www.gstatic.com/generate_204', { mode: 'no-cors', cache: 'no-store' }); times.push(performance.now() - t); }
+      r.auto.ping = Math.round(times.slice(1).reduce((a, b) => a + b, 0) / (times.length - 1));
+      const t = performance.now();
+      const blob = await (await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js', { cache: 'no-store' })).blob();
+      r.auto.speed = ((blob.size * 8) / ((performance.now() - t) / 1000) / 1e6).toFixed(1);
+      msg.textContent = '완료'; brief(); draw();
+    } catch (e) { msg.textContent = '측정 실패: ' + e.message; }
+  };
+  draw();
+  return () => { removeEventListener('offline', off); removeEventListener('online', on); };
+}
+
+/* ===================== 8. 배터리 ===================== */
+function renderBattery(body) {
+  const r = res('battery');
+  body.innerHTML = `
+    <p class="desc">충전기를 <b>뽑았다가 다시 꽂아</b> 충전 상태 변화가 감지되는지 확인하세요.
+    배터리 수명(설계 용량 대비)은 ChromeOS '진단' 앱에서 확인할 수 있습니다.</p>
+    <div class="big" id="bLevel">-</div><div id="bState" style="margin-bottom:12px"></div>
+    <div class="chips" id="bChips"></div>
+    <h3>변화 기록</h3><div class="mono" id="bLog">-</div>`;
+  if (!navigator.getBattery) { $('#bState', body).innerHTML = '<div class="alert">이 환경에서는 배터리 정보를 읽을 수 없습니다.</div>'; return; }
+  const mark = chipSet($('#bChips', body), r, [['unplug', '충전기 분리 감지'], ['plug', '충전기 연결 감지']]);
+  const log = []; let bat = null;
+  const fmt = s => (!isFinite(s) || !s) ? '-' : `${Math.floor(s / 3600)}시간 ${Math.round(s % 3600 / 60)}분`;
+  const draw = () => {
+    const lv = Math.round(bat.level * 100);
+    $('#bLevel', body).textContent = `🔋 ${lv}%`;
+    $('#bState', body).textContent = bat.charging ? `⚡ 충전 중 (완충까지 ${fmt(bat.chargingTime)})` : `배터리 사용 중 (남은 시간 ${fmt(bat.dischargingTime)})`;
+    r.auto.brief = `잔량 ${lv}%` + (r.auto.checks.unplug && r.auto.checks.plug ? ', 충전 전환 정상' : ''); save();
+  };
+  const onCh = () => {
+    log.unshift(`${new Date().toLocaleTimeString('ko-KR')}  ${bat.charging ? '충전기 연결됨' : '충전기 분리됨'}`);
+    mark(bat.charging ? 'plug' : 'unplug');
+    $('#bLog', body).innerHTML = log.map(esc).join('<br>'); draw();
+  };
+  navigator.getBattery().then(b => { bat = b; b.addEventListener('chargingchange', onCh); b.addEventListener('levelchange', draw); draw(); });
+  return () => { if (bat) { bat.removeEventListener('chargingchange', onCh); bat.removeEventListener('levelchange', draw); } };
+}
+
+/* ===================== 9. USB·외부장치 ===================== */
+function renderPorts(body) {
+  const r = res('ports');
+  body.innerHTML = `
+    <p class="desc">USB 메모리를 꽂고 파일을 하나 선택해 읽히는지 확인하세요. 포트가 여러 개면 각 포트에서 반복합니다.
+    외부 모니터와 블루투스도 연결해 확인하세요.</p>
+    <h3>① USB 저장장치</h3>
+    <div class="row"><input type="file" id="uFile" multiple></div><div id="uMsg" style="margin-top:6px"></div>
+    <h3>② 외부 모니터</h3>
+    <div class="row"><button id="xBtn">🖥️ 연결된 화면 확인</button><span id="xMsg"></span></div>
+    <h3>③ 블루투스</h3>
+    <div class="row"><button id="btBtn">🔵 블루투스 검색</button><span id="btMsg"></span></div>
+    <p class="desc" style="margin-top:6px">검색 창이 뜨고 주변 기기가 보이면 정상입니다. 기기를 선택하지 않고 닫아도 됩니다.</p>`;
+  r.auto.parts = r.auto.parts || {};
+  const brief = () => { const p = r.auto.parts; r.auto.brief = [p.usb, p.screen, p.bt].filter(Boolean).join(' / ') || '-'; save(); };
+  $('#uFile', body).onchange = e => {
+    const fs = [...e.target.files];
+    r.auto.parts.usb = fs.length ? `USB 파일 ${fs.length}개 읽음` : '';
+    $('#uMsg', body).innerHTML = fs.map(f => `<span class="chip done">${esc(f.name)} (${(f.size / 1024).toFixed(0)}KB)</span>`).join(' ');
+    brief();
+  };
+  $('#xBtn', body).onclick = async () => {
+    let n = null, txt;
+    try { if ('getScreenDetails' in window) { const d = await getScreenDetails(); n = d.screens.length; txt = d.screens.map(s => `${s.label || '화면'} ${s.width}×${s.height}`).join(', '); } } catch (e) {}
+    if (n === null) { n = screen.isExtended ? 2 : 1; txt = screen.isExtended ? '확장 화면 감지됨' : '화면 1개'; }
+    r.auto.parts.screen = `화면 ${n}개`;
+    $('#xMsg', body).textContent = `${n >= 2 ? '✅' : 'ℹ️'} ${n}개 감지 — ${txt}`; brief();
+  };
+  $('#btBtn', body).onclick = async () => {
+    const m = $('#btMsg', body);
+    if (!navigator.bluetooth) { m.textContent = '이 브라우저는 블루투스 검색을 지원하지 않습니다.'; return; }
+    try {
+      if (!(await navigator.bluetooth.getAvailability())) { m.textContent = '❌ 블루투스 어댑터를 찾을 수 없거나 꺼져 있습니다.'; r.auto.parts.bt = '블루투스 없음/꺼짐'; brief(); return; }
+      const d = await navigator.bluetooth.requestDevice({ acceptAllDevices: true });
+      m.textContent = `✅ 기기 선택됨: ${d.name || '(이름 없음)'}`; r.auto.parts.bt = '블루투스 정상';
+    } catch (e) {
+      if (e.name === 'NotFoundError' && /cancel/i.test(e.message)) { m.textContent = '✅ 검색 창 열림(어댑터 작동)'; r.auto.parts.bt = '블루투스 어댑터 작동'; }
+      else { m.textContent = '❌ ' + e.message; r.auto.parts.bt = '블루투스 오류'; }
+    }
+    brief();
+  };
+  brief();
+}
+
+/* ===================== 10. 수동 점검 ===================== */
+const MANUAL = [
+  ['bright', '밝기 조절 키', '밝기 키로 화면 밝기가 바뀜'],
+  ['volume', '볼륨·음소거 키', '누르면 화면에 볼륨 표시가 나타남'],
+  ['sleep', '덮개 닫기·절전 복귀', '덮개를 닫고 30초 뒤 열면 정상 복귀 (아래 자동 감지 참고)'],
+  ['reboot', '재부팅·종료', '전원 메뉴에서 재부팅 시 정상 부팅'],
+  ['headset', '이어폰 단자', '이어폰 연결 시 소리가 이어폰으로 전환'],
+  ['hdmi', '외부 모니터 출력', 'HDMI 등 연결 시 확장/미러링 정상'],
+  ['usbport', '모든 USB 포트', 'USB 마우스·메모리가 각 포트에서 인식'],
+  ['wifiauto', 'Wi-Fi 자동 연결', '재부팅 후 Wi-Fi에 자동 연결'],
+  ['led', '충전·전원 표시등', '충전기 연결 시 표시등 점등'],
+  ['heat', '발열·팬 소음', '10분 사용 후 과열·심한 팬 소음 없음'],
+];
+function manualStatus() {
+  const v = MANUAL.map(([k]) => state.manual[k] || '');
+  const r = res('manual');
+  r.status = v.includes('fail') ? 'fail' : v.includes('') ? '' : v.every(x => x === 'skip') ? 'skip' : 'pass';
+  const fails = MANUAL.filter(([k]) => state.manual[k] === 'fail').map(([, t]) => t);
+  r.auto.brief = `${v.filter(Boolean).length}/${MANUAL.length}항목 확인` + (fails.length ? ` (이상: ${fails.join(', ')})` : '');
+  save();
+}
+function renderManual(body) {
+  body.innerHTML = `
+    <p class="desc">웹앱이 직접 확인할 수 없는 항목입니다. 직접 해 보고 각 항목을 판정하세요.</p>
+    <div id="sleepBox"></div><div id="mList"></div>`;
+  const drawSleep = () => {
+    const L = state.sleepLog || [];
+    $('#sleepBox', body).innerHTML = L.length
+      ? `<div class="alert ok">💤 화면 정지(절전 추정) 후 복귀 감지: ${L.slice(-3).map(x => `${esc(x.at)} (${x.sec}초)`).join(', ')}</div>`
+      : `<div class="alert">💤 이 화면을 켜 둔 채로 덮개를 닫았다 열면 복귀가 자동 기록됩니다.</div>`;
+  };
+  const list = $('#mList', body);
+  list.innerHTML = MANUAL.map(([k, t, d]) => `<div class="mrow" data-k="${k}"><div><b>${t}</b><small>${d}</small></div>
+    <div class="row"><button data-v="pass" class="pass">✅</button><button data-v="fail" class="fail">❌</button><button data-v="skip" class="skip">➖</button></div></div>`).join('');
+  const paint = () => list.querySelectorAll('.mrow').forEach(row => row.querySelectorAll('button').forEach(b => b.classList.toggle('on', state.manual[row.dataset.k] === b.dataset.v)));
+  list.querySelectorAll('.mrow').forEach(row => row.querySelectorAll('button').forEach(b => b.onclick = () => {
+    state.manual[row.dataset.k] = b.dataset.v; manualStatus(); paint(); renderNav();
+  }));
+  const note = document.createElement('div'); note.className = 'verdict';
+  note.innerHTML = `<span class="vlabel">메모</span><input class="note" placeholder="수동 점검 관련 메모">`;
+  body.appendChild(note);
+  const ni = $('.note', note); ni.value = res('manual').note || ''; ni.oninput = () => { res('manual').note = ni.value; save(); };
+  drawSleep(); paint();
+  onSleep = drawSleep;
+  return () => { onSleep = null; };
+}
+/* 절전 복귀 감지: 타이머가 오래 멈췄다가 다시 돌면 기록 */
+let lastTick = Date.now(), onSleep = null;
+setInterval(() => {
+  const now = Date.now(), gap = now - lastTick; lastTick = now;
+  if (gap > 15000) {
+    state.sleepLog = state.sleepLog || [];
+    state.sleepLog.push({ at: new Date(now).toLocaleTimeString('ko-KR'), sec: Math.round(gap / 1000) }); save();
+    onSleep && onSleep();
+  }
+}, 2000);
+
+/* ===================== 11. 요약·전송 ===================== */
+function overall() {
+  const st = JUDGED.map(s => (state.results[s.id] || {}).status || '');
+  if (st.includes('fail')) return '이상 있음';
+  if (st.includes('')) return '점검 미완료';
+  return '합격';
+}
+function payload() {
+  return {
+    token: CONFIG.TOKEN, sentAt: new Date().toISOString(), startedAt: state.startedAt,
+    info: state.info, sys: state.sys, overall: overall(),
+    steps: JUDGED.map(s => { const r = state.results[s.id] || {}; return { id: s.id, title: s.title, status: r.status || '', note: r.note || '', brief: (r.auto || {}).brief || '' }; }),
+    manual: state.manual, sleepLog: state.sleepLog
+  };
+}
+function renderSummary(body) {
+  manualStatus();
+  const o = overall();
+  const cls = o === '합격' ? 'ok' : o === '이상 있음' ? 'bad' : '';
+  body.innerHTML = `
+    <div class="alert ${cls}" style="font-size:18px"><b>종합 판정: ${o}</b> ${state.info.assetId ? `· ${esc(state.info.assetId)}` : ''} ${state.info.model ? `· ${esc(state.info.model)}` : ''}</div>
+    <table style="margin:12px 0"><tr><th>항목</th><th style="width:90px">판정</th><th style="width:auto">측정·메모</th></tr>
+    ${JUDGED.map(s => { const r = state.results[s.id] || {}; return `<tr><td>${s.title}</td><td>${ICON[r.status || '']} ${LABEL[r.status || '']}</td><td>${esc((r.auto || {}).brief || '')}${r.note ? `<br><b>메모:</b> ${esc(r.note)}` : ''}</td></tr>`; }).join('')}
+    </table>
+    <div class="row">
+      <button class="primary" id="sendBtn">📤 시트로 전송</button>
+      <button id="csvBtn">⬇️ CSV 저장</button>
+      <button id="newBtn">🔄 다음 기기 점검</button>
+    </div>
+    <div id="sendMsg" style="margin-top:10px"></div>`;
+  $('#sendBtn', body).onclick = sendResult;
+  $('#csvBtn', body).onclick = () => {
+    const p = payload(), q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [['관리번호', '모델', '점검자', '항목', '판정', '측정', '메모'].map(q).join(',')]
+      .concat(p.steps.map(s => [p.info.assetId, p.info.model, p.info.tester, s.title, LABEL[s.status], s.brief, s.note].map(q).join(',')));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv' }));
+    a.download = `점검_${p.info.assetId || '기기'}_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  };
+  $('#newBtn', body).onclick = () => {
+    if (!confirm('현재 기록을 지우고 새 기기 점검을 시작할까요? (전송했는지 먼저 확인하세요)')) return;
+    state = fresh(state.info.tester); save(); go(0);
+  };
+}
+async function sendResult() {
+  const msg = $('#sendMsg');
+  if (!CONFIG.GAS_URL) { msg.innerHTML = '<div class="alert bad">CONFIG.GAS_URL 이 비어 있습니다. index.html 상단에 GAS 배포 URL을 입력하세요.</div>'; return; }
+  if (!state.info.assetId) { alert('기기 정보에서 관리번호를 먼저 입력하세요.'); go(0); return; }
+  const body = JSON.stringify(payload());
+  msg.innerHTML = '<div class="alert">전송 중…</div>';
+  try {
+    const r = await fetch(CONFIG.GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
+    const j = await r.json();
+    msg.innerHTML = j.ok ? `<div class="alert ok">✅ 시트 ${j.row}행에 저장되었습니다.</div>` : `<div class="alert bad">❌ 저장 실패: ${esc(j.error)}</div>`;
+  } catch (e) {
+    try {
+      await fetch(CONFIG.GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body });
+      msg.innerHTML = '<div class="alert">📤 전송했습니다(응답 확인 불가). 시트에서 저장 여부를 확인하세요.</div>';
+    } catch (e2) { msg.innerHTML = `<div class="alert bad">❌ 전송 실패: ${esc(e2.message)} — CSV로 저장해 두세요.</div>`; }
+  }
+}
+
+/* ===================== 시작 ===================== */
+if (!state.sys.chrome) collectSys().then(s => { state.sys = s; save(); });
+go(0);
+</script>
+</body>
+</html>
